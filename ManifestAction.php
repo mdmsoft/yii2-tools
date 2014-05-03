@@ -25,7 +25,8 @@ class ManifestAction extends \yii\base\Action
                 $time = date('Y-m-d H:i:s');
                 $cache->set($key, $time);
             }
-            $headers = Yii::$app->response->headers->set('Content-Type', 'text/cache-manifest');
+            Yii::$app->response->format = \yii\web\Response::FORMAT_RAW;
+            Yii::$app->response->headers->set('Content-Type', 'text/cache-manifest');
 
             $manifest = Yii::$app->getView()->renderFile($data['template_file'], [
                 'caches' => $data['caches'],

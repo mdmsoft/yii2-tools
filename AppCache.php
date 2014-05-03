@@ -5,6 +5,7 @@ namespace mdm\tools;
 use \Yii;
 use yii\web\View;
 use yii\helpers\Url;
+use yii\web\Application;
 
 /**
  * Description of AppCache
@@ -13,37 +14,40 @@ use yii\helpers\Url;
  */
 class AppCache extends \yii\base\Behavior
 {
-
     const CACHE_KEY = 'manifest';
 
-    public $id;
-    public $template_file;
+    private $_cache = false;
+    private $_manifest_id;
+    public $template_file = '@mdm/tools/manifest.php';
     public $route = '/site/manifest';
     public $extra_caches = [];
     public $uniqueForClient = true;
     public $uniqueForUser = true;
 
-    public function init()
-    {
-        if ($this->id === null) {
-            throw new \yii\base\InvalidConfigException(self::className() . '::id harus diisi');
-        }
-        if ($this->template_file === null) {
-            $this->template_file = __DIR__ . '/_manifest.php';
-        }
-        parent::init();
-    }
-
     public function events()
     {
-        return [
-            View::EVENT_END_PAGE => 'createManifest',
-            View::EVENT_END_BODY => 'swapCache',
+        return[
+            Application::EVENT_BEFORE_ACTION => 'beforeAction'
         ];
+    }
+
+    /**
+     * 
+     * @param \yii\base\ActionEvent $event
+     */
+    public function beforeAction($event)
+    {
+        $this->_manifest_id = md5($event->action->uniqueId);
+        $view = $event->action->controller->getView();
+        $view->on(View::EVENT_END_PAGE, [$this, 'createManifest']);
+        $view->on(View::EVENT_END_BODY, [$this, 'swapCache']);
     }
 
     public function swapCache($event)
     {
+        if ($this->_cache === false) {
+            return;
+        }
         $js = "
 if (window.applicationCache) {
 	window.applicationCache.update();
@@ -60,10 +64,13 @@ if (window.applicationCache) {
 
     public function createManifest($event)
     {
+        if ($this->_cache === false) {
+            return;
+        }
         try {
             $cache = Yii::$app->cache;
-            $key = [self::CACHE_KEY, $this->id];
-            if ($cache === null or $cache->get($key) === false or true) {
+            $key = [self::CACHE_KEY, $this->_manifest_id];
+            if ($cache === null or $cache->get($key) === false or YII_ENV == 'dev') {
                 $view = $event->sender;
                 $html = '<html>';
                 foreach ($view->jsFiles as $jsFiles) {
@@ -92,14 +99,18 @@ if (window.applicationCache) {
                     ]);
                 }
             }
-        } catch (Exception $exc) {
-            
+        } catch (\Exception $exc) {
+            throw $exc;
         }
+    }
+
+    public function cacheApp()
+    {
+        $this->_cache = true;
     }
 
     public function getManifestFile()
     {
-        return Url::toRoute([$this->route, 'id' => $this->id], true);
+        return $this->_cache ? Url::toRoute([$this->route, 'id' => $this->_manifest_id], true) : null;
     }
-
 }

@@ -8,6 +8,7 @@ use yii\helpers\Inflector;
 use \ReflectionClass;
 use \Yii;
 use yii\mongodb\Collection;
+use yii\helpers\ArrayHelper;
 
 /**
  * Description of Logger
@@ -16,7 +17,6 @@ use yii\mongodb\Collection;
  */
 class Logger extends Behavior
 {
-
     /**
      *
      * @var Collection[]
@@ -25,7 +25,6 @@ class Logger extends Behavior
     private static $_user_id;
     public $logParams = [];
     public $attributes = [];
-    public $orderAttribute = [];
     public $collectionName;
 
     public function init()
@@ -54,32 +53,24 @@ class Logger extends Behavior
     public function insertLog($event)
     {
         $model = $this->owner;
-        $data = [
-            'log_time1' => new \MongoDate(),
-            'log_time2' => time(),
-            'log_by' => self::$_user_id,
-        ];
+        $logs = ArrayHelper::merge([
+                'log_time1' => new \MongoDate(),
+                'log_time2' => time(),
+                'log_by' => self::$_user_id,
+                ], $this->logParams);
+        $data = [];
         foreach ($this->attributes as $attribute) {
-            $data[$attribute] = $model->{$attribute};
-        }
-        foreach ($this->owner->logParams as $key => $value) {
-            $data[$key] = $value;
-        }
-        $orders = [];
-        foreach ($this->orderAttribute as $attribute) {
-            if (isset($data[$attribute])) {
-                $orders[$attribute] = $data[$attribute];
-                unset($data[$attribute]);
+            if ($model->hasAttribute($attribute)) {
+                $data[$attribute] = $model->{$attribute};
+            } elseif (isset($logs[$attribute]) || array_key_exists($attribute, $logs)) {
+                $data[$attribute] = $logs[$attribute];
             }
         }
-        foreach ($data as $attribute => $value) {
-            $orders[$attribute] = $data[$attribute];
-        }
         try {
-            self::$_collection[$this->collectionName]->insert($orders);
+            self::$_collection[$this->collectionName]->insert($data);
         } catch (\Exception $exc) {
             
         }
     }
-
+    
 }
